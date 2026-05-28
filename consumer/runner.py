@@ -43,14 +43,12 @@ async def run() -> None:
 
     try:
         while True:
-            msg = await loop.run_in_executor(None, consumer.poll, 1.0)
-            if msg is None:
-                continue
-            if msg.error():
-                if msg.error().code() != KafkaError._PARTITION_EOF:
-                    logger.error(f"Consumer error: {msg.error()}")
-                continue
-            await handler.handle(raw_value=msg.value())
+            msgs = await loop.run_in_executor(None, consumer.consume, 10, 0.1)
+            valid = [m for m in msgs if not m.error()]
+            if valid:
+                await asyncio.gather(
+                    *[handler.handle(raw_value=m.value()) for m in valid],
+                )
     finally:
         consumer.close()
         await redis.aclose()

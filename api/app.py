@@ -45,17 +45,16 @@ async def _consume_responses() -> None:
     loop = asyncio.get_running_loop()
     try:
         while True:
-            msg = await loop.run_in_executor(None, consumer.poll, 0.1)
-            if msg is None:
-                continue
-            if msg.error():
-                if msg.error().code() != KafkaError._PARTITION_EOF:
-                    logger.error(f"Consumer error: {msg.error()}")
-                continue
-            data = json.loads(msg.value())
-            request_id = data.get("request_id")
-            if request_id and request_id in state.response_queues:
-                await state.response_queues[request_id].put(data)
+            msgs = await loop.run_in_executor(None, consumer.consume, 100, 0.05)
+            for msg in msgs:
+                if msg.error():
+                    if msg.error().code() != KafkaError._PARTITION_EOF:
+                        logger.error(f"Consumer error: {msg.error()}")
+                    continue
+                data = json.loads(msg.value())
+                request_id = data.get("request_id")
+                if request_id and request_id in state.response_queues:
+                    await state.response_queues[request_id].put(data)
     finally:
         consumer.close()
 
