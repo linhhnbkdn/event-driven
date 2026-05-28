@@ -1,7 +1,7 @@
 # Event-Driven Streaming System — Design Spec
 
 **Date:** 2026-05-28
-**Stack:** FastAPI · Kafka · Redis · PostgreSQL · Alembic · CLI
+**Stack:** FastAPI · Confluent Kafka · Redis · PostgreSQL · Alembic · CLI · uv
 
 ---
 
@@ -134,7 +134,8 @@ event-driven/
 ├── alembic.ini
 ├── alembic/
 │   └── versions/
-├── requirements.txt
+├── pyproject.toml             ← uv project (replaces requirements.txt)
+├── uv.lock
 │
 ├── shared/
 │   ├── __init__.py
@@ -167,7 +168,7 @@ All infrastructure clients injected via `Depends()`:
 # dependencies.py
 async def get_db() -> AsyncGenerator[AsyncSession, None]: ...
 async def get_redis() -> Redis: ...
-async def get_producer() -> AIOKafkaProducer: ...
+async def get_producer() -> Producer: ...  # confluent_kafka.Producer
 ```
 
 Routers declare dependencies explicitly — no global state.
@@ -202,8 +203,8 @@ Services: `zookeeper`, `kafka`, `redis`, `postgres`
 
 App and worker run locally:
 ```bash
-uvicorn app.main:app --reload
-python worker/main.py
+uv run uvicorn app.main:app --reload
+uv run python worker/main.py
 ```
 
 ---
@@ -213,7 +214,7 @@ python worker/main.py
 | Purpose | Library |
 |---|---|
 | FastAPI async | `fastapi`, `uvicorn` |
-| Kafka client | `aiokafka` |
+| Kafka client | `confluent-kafka` |
 | Redis | `redis[asyncio]` |
 | PostgreSQL ORM | `sqlalchemy[asyncio]`, `asyncpg` |
 | Migrations | `alembic` |
