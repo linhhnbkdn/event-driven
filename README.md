@@ -3,14 +3,29 @@
 LLM-style token streaming qua Kafka, FastAPI SSE, Redis, PostgreSQL.
 
 ```
-CLI ──POST /chat──► FastAPI ──► Kafka[chat.requests]
-                                       │
-                               Mock LLM Worker
-                                       │
-CLI ◄──SSE stream──  FastAPI ◄── Kafka[chat.responses]
+CLI ──POST /chat──► FastAPI (api/) ──► Kafka[chat.requests]
+                                              │
+                                    Consumer (consumer/)
+                                    LLM Strategy (infrastructure/llm/)
+                                              │
+CLI ◄──SSE stream──  FastAPI ◄──── Kafka[chat.responses]
                         │
-                   Redis ZADD/ZRANGE (history cache)
-                   PostgreSQL (persistent storage)
+                   Redis ZADD/ZRANGE  ←  ConversationCache
+                   PostgreSQL         ←  MessageStore
+```
+
+## Architecture
+
+Clean Architecture — dependency rule: outer layers depend on inner, never reverse.
+
+```
+domain/          ← innermost, no external imports
+    ↑ depends on
+application/     ← use cases + interfaces (ABCs)
+    ↑ depends on
+infrastructure/  ← Kafka, Redis, Postgres, LLM adapters
+api/             ← FastAPI adapter (Backend role)
+consumer/        ← Kafka consumer adapter (Consumer role)
 ```
 
 ## Stack
@@ -98,6 +113,21 @@ tests/
   integration/  — routers + cache with fakeredis/httpx
 ```
 
+## Swapping LLM Provider
+
+The LLM layer uses the **Strategy Pattern** — swap provider by changing one env var:
+
+```bash
+# Mock (default, no API key needed)
+LLM_PROVIDER=mock
+
+# OpenAI
+LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+```
+
+Adding a new provider: implement `TokenGenerator` ABC in `infrastructure/llm/`, add a case to `infrastructure/llm/factory.py`.
+
 ## Environment variables
 
 See `.env.example`. Default values work with `docker compose up`.
@@ -107,4 +137,6 @@ KAFKA_BOOTSTRAP_SERVERS=localhost:9092
 REDIS_URL=redis://localhost:6379
 DATABASE_URL=postgresql+asyncpg://app:app@localhost:5432/chatdb
 REDIS_TTL=86400
+LLM_PROVIDER=mock
+OPENAI_API_KEY=
 ```
