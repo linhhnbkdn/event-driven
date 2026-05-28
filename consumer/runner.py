@@ -22,7 +22,12 @@ async def run() -> None:
     redis = Redis.from_url(settings.redis_url)
     engine = create_async_engine(settings.database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
-    producer = Producer({"bootstrap.servers": settings.kafka_bootstrap_servers})
+    producer = Producer({
+        "bootstrap.servers": settings.kafka_bootstrap_servers,
+        "linger.ms": 0,       # send tokens immediately — streaming, every ms counts
+        "batch.size": 4096,   # 4KB — tokens are ~20-50 bytes, small batches keep latency low
+        "acks": "1",
+    })
 
     use_case = ProcessChatRequestUseCase(
         generator=create_llm_strategy(),

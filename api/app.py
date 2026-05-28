@@ -62,7 +62,12 @@ async def _consume_responses() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.redis = Redis.from_url(settings.redis_url)
-    app.state.producer = Producer({"bootstrap.servers": settings.kafka_bootstrap_servers})
+    app.state.producer = Producer({
+        "bootstrap.servers": settings.kafka_bootstrap_servers,
+        "linger.ms": 5,        # wait up to 5ms to batch requests — low volume, latency-tolerant
+        "batch.size": 16384,   # 16KB — one chat request is ~100 bytes, no need for large batches
+        "acks": "1",
+    })
     _ensure_topics()
     task = asyncio.create_task(_consume_responses())
     yield
