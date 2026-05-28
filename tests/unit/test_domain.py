@@ -14,7 +14,7 @@ def test_message_role_assistant_is_string_assistant():
 def test_message_is_frozen():
     msg = Message(session_id="s", request_id="r", role=MessageRole.USER, content="hi")
     with pytest.raises(FrozenInstanceError):
-        object.__setattr__(msg, "content", "changed")
+        msg.content = "changed"
 
 def test_message_equality():
     m1 = Message(session_id="s", request_id="r", role=MessageRole.USER, content="hi")
