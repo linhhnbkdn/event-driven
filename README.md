@@ -51,8 +51,8 @@ make history SESSION=demo-001
 make up          — docker compose up -d
 make down        — docker compose down
 make migrate     — alembic upgrade head
-make dev         — uvicorn app.main:app --reload
-make worker      — python -m worker.main
+make dev         — python run_api.py
+make worker      — python run_worker.py
 make test        — pytest -v
 make chat        — SESSION=<id> MSG=<text>
 make history     — SESSION=<id>
@@ -81,18 +81,21 @@ data: [DONE]
 ## Project structure
 
 ```
-shared/         — Pydantic schemas + pydantic-settings
-app/            — FastAPI service
-  routers/      — chat endpoints
-  services/     — history (Redis ZADD/ZRANGE)
-  dependencies.py — DI: get_db, get_redis, get_producer
-  state.py      — response_queues fan-out dict
-worker/         — Mock LLM consumer
-  mock_llm.py   — async token generator
-  persistence.py — Redis + PostgreSQL write
-alembic/        — DB migrations
-tests/          — unit tests (fakeredis, httpx ASGITransport)
-cli.py          — httpx CLI client
+domain/         — entities (Message, Session), value objects (MessageRole)
+application/
+  interfaces/   — ABCs: ConversationCache, EventPublisher, MessageStore, TokenGenerator
+  use_cases/    — SendMessage, GetHistory, ProcessChatRequest
+infrastructure/
+  kafka/        — KafkaEventPublisher
+  llm/          — Strategy: MockLLMStrategy, OpenAIStrategy, factory
+  redis/        — RedisConversationCache
+  postgres/     — PostgresMessageStore, ORM models
+api/            — FastAPI (Backend role): app.py, dependencies, routers
+consumer/       — Kafka consumer (Consumer role): handler, runner
+shared/         — cross-cutting: Kafka schemas, pydantic-settings
+tests/
+  unit/         — use cases tested with mock ABCs
+  integration/  — routers + cache with fakeredis/httpx
 ```
 
 ## Environment variables

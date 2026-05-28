@@ -13,10 +13,10 @@ migrate:
 	uv run alembic upgrade head
 
 dev:
-	uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+	uv run python run_api.py
 
 worker:
-	uv run python -m worker.main
+	uv run python run_worker.py
 
 test:
 	uv run pytest -v
