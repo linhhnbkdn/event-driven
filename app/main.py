@@ -52,3 +52,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Event-Driven Streaming", lifespan=lifespan)
+
+from app.routers import chat  # noqa: E402
+app.include_router(chat.router)
