@@ -1,7 +1,10 @@
-.PHONY: up down migrate dev worker persistence test chat history psql logs
+.PHONY: up down build migrate dev worker persistence test chat history psql logs
 
 SESSION ?= default
 MSG     ?= hello
+
+build:
+	docker compose build
 
 up:
 	docker compose up -d
@@ -10,16 +13,16 @@ down:
 	docker compose down
 
 migrate:
-	uv run alembic upgrade head
+	docker compose exec api python -m alembic upgrade head
 
 dev:
-	uv run python run_api.py
+	docker compose up api --no-deps
 
 worker:
-	uv run python run_worker.py
+	docker compose up worker --no-deps
 
 persistence:
-	uv run python run_persistence.py
+	docker compose up persistence --no-deps
 
 test:
 	uv run pytest -v
