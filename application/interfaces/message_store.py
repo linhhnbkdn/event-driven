@@ -7,3 +7,6 @@ from domain.entities import Message
 class MessageStore(ABC):
     @abstractmethod
     async def save_message(self, message: Message) -> None: ...
+
+    @abstractmethod
+    async def get_history(self, session_id: str) -> list[Message]: ...

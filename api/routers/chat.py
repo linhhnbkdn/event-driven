@@ -7,7 +7,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from api import state
-from api.dependencies import get_history_use_case, get_send_message_use_case
+from api.dependencies import get_history_use_case, get_message_store, get_send_message_use_case
+from application.interfaces.message_store import MessageStore
 from application.use_cases.get_history import GetHistoryUseCase
 from application.use_cases.send_message import SendMessageUseCase
 
@@ -64,6 +65,18 @@ async def get_conversation_history(
     use_case: GetHistoryUseCase = Depends(get_history_use_case),
 ) -> list[dict]:
     messages = await use_case.execute(session_id=session_id)
+    return [
+        {"role": m.role.value, "content": m.content, "request_id": m.request_id}
+        for m in messages
+    ]
+
+
+@router.get("/history/{session_id}/db")
+async def get_conversation_history_from_db(
+    session_id: str,
+    store: MessageStore = Depends(get_message_store),
+) -> list[dict]:
+    messages = await store.get_history(session_id=session_id)
     return [
         {"role": m.role.value, "content": m.content, "request_id": m.request_id}
         for m in messages

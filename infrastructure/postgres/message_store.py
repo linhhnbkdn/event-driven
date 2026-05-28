@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from application.interfaces.message_store import MessageStore
 from domain.entities import Message
+from domain.value_objects import MessageRole
 
 
 class PostgresMessageStore(MessageStore):
@@ -30,3 +31,22 @@ class PostgresMessageStore(MessageStore):
                 },
             )
             await db.commit()
+
+    async def get_history(self, session_id: str) -> list[Message]:
+        async with self._session_factory() as db:
+            result = await db.execute(
+                text(
+                    "SELECT request_id, role, content FROM messages "
+                    "WHERE session_id = :sid ORDER BY id ASC"
+                ),
+                {"sid": session_id},
+            )
+            return [
+                Message(
+                    session_id=session_id,
+                    request_id=row.request_id,
+                    role=MessageRole(row.role),
+                    content=row.content,
+                )
+                for row in result.fetchall()
+            ]

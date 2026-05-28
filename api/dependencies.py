@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from application.interfaces.conversation_cache import ConversationCache
 from application.interfaces.event_publisher import EventPublisher
+from application.interfaces.message_store import MessageStore
 from application.use_cases.get_history import GetHistoryUseCase
 from application.use_cases.send_message import SendMessageUseCase
 from infrastructure.kafka.event_publisher import KafkaEventPublisher
@@ -40,3 +41,7 @@ def get_send_message_use_case(request: Request) -> SendMessageUseCase:
 
 def get_history_use_case(request: Request) -> GetHistoryUseCase:
     return GetHistoryUseCase(cache=get_conversation_cache(request=request))
+
+
+def get_message_store() -> MessageStore:
+    return PostgresMessageStore(session_factory=_session_factory)
