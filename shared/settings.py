@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379"
     database_url: str = "postgresql+asyncpg://app:app@localhost:5432/chatdb"
     redis_ttl: int = 86400
+    llm_provider: str = "mock"
+    openai_api_key: str = ""
 
 
 settings = Settings()
