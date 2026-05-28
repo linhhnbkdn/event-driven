@@ -16,3 +16,8 @@ class ChatResponse(BaseModel):
     session_id: str
     delta: str
     finish_reason: str | None = None
+
+
+class ChatCompleted(BaseModel):
+    session_id: str
+    request_id: str

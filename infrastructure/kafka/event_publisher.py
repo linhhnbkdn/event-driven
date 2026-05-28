@@ -4,7 +4,7 @@ import asyncio
 from confluent_kafka import Producer
 
 from application.interfaces.event_publisher import EventPublisher
-from shared.schemas import ChatRequest, ChatResponse
+from shared.schemas import ChatCompleted, ChatRequest, ChatResponse
 
 
 class KafkaEventPublisher(EventPublisher):
@@ -28,6 +28,13 @@ class KafkaEventPublisher(EventPublisher):
         self._producer.produce(
             topic="chat.responses",
             value=response.model_dump_json(),
+        )
+        self._producer.poll(0)
+
+    async def publish_completed(self, completed: ChatCompleted) -> None:
+        self._producer.produce(
+            topic="chat.completed",
+            value=completed.model_dump_json(),
         )
         self._producer.poll(0)
 

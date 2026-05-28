@@ -4,10 +4,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 from application.use_cases.send_message import SendMessageUseCase
 from application.use_cases.get_history import GetHistoryUseCase
+from application.use_cases.persist_session import PersistSessionUseCase
 from application.use_cases.process_chat_request import ProcessChatRequestUseCase
 from domain.entities import Message
 from domain.value_objects import MessageRole
-from shared.schemas import ChatRequest
+from shared.schemas import ChatCompleted, ChatRequest
 
 
 async def test_send_message_returns_uuid_request_id():
@@ -42,6 +43,14 @@ async def test_get_history_delegates_to_cache():
     cache.get_history.assert_awaited_once_with(session_id="s")
 
 
+def _make_publisher():
+    publisher = AsyncMock()
+    publisher.publish_response = AsyncMock()
+    publisher.publish_completed = AsyncMock()
+    publisher.flush = MagicMock()
+    return publisher
+
+
 async def test_process_request_publishes_token_per_word():
     async def fake_generate(content: str):
         yield "Hello"
@@ -49,19 +58,14 @@ async def test_process_request_publishes_token_per_word():
 
     generator = MagicMock()
     generator.generate = fake_generate
-    publisher = AsyncMock()
-    publisher.publish_response = AsyncMock()
-    publisher.flush = MagicMock()
+    publisher = _make_publisher()
     cache = AsyncMock()
     cache.save_message = AsyncMock()
-    store = AsyncMock()
-    store.save_message = AsyncMock()
 
     use_case = ProcessChatRequestUseCase(
         generator=generator,
         publisher=publisher,
         cache=cache,
-        store=store,
     )
     request = ChatRequest(session_id="s1", content="test", request_id="req1")
     await use_case.execute(request=request)
@@ -73,33 +77,66 @@ async def test_process_request_publishes_token_per_word():
     publisher.flush.assert_called_once()
 
 
-async def test_process_request_dual_writes_user_and_assistant():
+async def test_process_request_caches_user_and_assistant():
     async def fake_generate(content: str):
         yield "Hi"
 
     generator = MagicMock()
     generator.generate = fake_generate
-    publisher = AsyncMock()
-    publisher.publish_response = AsyncMock()
-    publisher.flush = MagicMock()
+    publisher = _make_publisher()
     cache = AsyncMock()
     cache.save_message = AsyncMock()
-    store = AsyncMock()
-    store.save_message = AsyncMock()
 
     use_case = ProcessChatRequestUseCase(
         generator=generator,
         publisher=publisher,
         cache=cache,
-        store=store,
     )
     request = ChatRequest(session_id="s1", content="hello", request_id="req1")
     await use_case.execute(request=request)
 
     assert cache.save_message.await_count == 2
-    assert store.save_message.await_count == 2
     saved_roles = [
         call.kwargs["message"].role
         for call in cache.save_message.call_args_list
     ]
     assert saved_roles == [MessageRole.USER, MessageRole.ASSISTANT]
+
+
+async def test_process_request_publishes_completed_after_cache():
+    async def fake_generate(content: str):
+        yield "Hi"
+
+    generator = MagicMock()
+    generator.generate = fake_generate
+    publisher = _make_publisher()
+    cache = AsyncMock()
+    cache.save_message = AsyncMock()
+
+    use_case = ProcessChatRequestUseCase(
+        generator=generator,
+        publisher=publisher,
+        cache=cache,
+    )
+    request = ChatRequest(session_id="s1", content="hello", request_id="req1")
+    await use_case.execute(request=request)
+
+    publisher.publish_completed.assert_awaited_once()
+    call_arg = publisher.publish_completed.call_args.kwargs["completed"]
+    assert call_arg.session_id == "s1"
+    assert call_arg.request_id == "req1"
+
+
+async def test_persist_session_filters_by_request_id_and_writes_store():
+    msg_this = Message(session_id="s", request_id="req1", role=MessageRole.USER, content="hi")
+    msg_old = Message(session_id="s", request_id="req0", role=MessageRole.USER, content="old")
+    cache = AsyncMock()
+    cache.get_history = AsyncMock(return_value=[msg_old, msg_this])
+    store = AsyncMock()
+    store.save_message = AsyncMock()
+
+    use_case = PersistSessionUseCase(cache=cache, store=store)
+    await use_case.execute(completed=ChatCompleted(session_id="s", request_id="req1"))
+
+    # only msg_this matches request_id="req1"
+    store.save_message.assert_awaited_once_with(message=msg_this)

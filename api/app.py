@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def _ensure_topics() -> None:
     admin = AdminClient({"bootstrap.servers": settings.kafka_bootstrap_servers})
-    topics = ["chat.requests", "chat.responses"]
+    topics = ["chat.requests", "chat.responses", "chat.completed"]
     existing = admin.list_topics(timeout=10).topics
     to_create = [
         NewTopic(t, num_partitions=1, replication_factor=1,)

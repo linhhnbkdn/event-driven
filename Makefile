@@ -1,4 +1,4 @@
-.PHONY: up down migrate dev worker test chat history psql logs
+.PHONY: up down migrate dev worker persistence test chat history psql logs
 
 SESSION ?= default
 MSG     ?= hello
@@ -17,6 +17,9 @@ dev:
 
 worker:
 	uv run python run_worker.py
+
+persistence:
+	uv run python run_persistence.py
 
 test:
 	uv run pytest -v
