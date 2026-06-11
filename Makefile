@@ -1,5 +1,5 @@
 .PHONY: up down build migrate dev worker persistence test chat history psql logs \
-        prod-up prod-down prod-build prod-migrate prod-logs
+        prod-up prod-down prod-build prod-migrate prod-logs prod-locust-scale
 
 SESSION ?= default
 MSG     ?= hello
@@ -54,3 +54,7 @@ prod-migrate:
 
 prod-logs:
 	docker compose -f docker-compose.prod.yaml logs -f
+
+LOCUST_WORKERS ?= 4
+prod-locust-scale:
+	docker compose -f docker-compose.prod.yaml up -d --scale locust-worker=$(LOCUST_WORKERS)
