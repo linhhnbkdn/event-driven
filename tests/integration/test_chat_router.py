@@ -1,5 +1,4 @@
 from __future__ import annotations
-import asyncio
 import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -7,8 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from httpx import ASGITransport, AsyncClient
 
 from api.app import app
-from api import state
-from api.dependencies import get_history_use_case, get_send_message_use_case
+from api.dependencies import get_history_use_case, get_redis, get_send_message_use_case
 from application.use_cases.get_history import GetHistoryUseCase
 from application.use_cases.send_message import SendMessageUseCase
 from domain.entities import Message
@@ -30,17 +28,21 @@ def mock_history_use_case():
 
 
 @pytest.fixture
-async def client(mock_send_use_case, mock_history_use_case):
+def fake_redis():
+    r = AsyncMock()
+    r.aclose = AsyncMock()
+    return r
+
+
+@pytest.fixture
+async def client(mock_send_use_case, mock_history_use_case, fake_redis):
     app.dependency_overrides[get_send_message_use_case] = lambda: mock_send_use_case
     app.dependency_overrides[get_history_use_case] = lambda: mock_history_use_case
-
-    fake_redis = AsyncMock()
-    fake_redis.aclose = AsyncMock()
+    app.dependency_overrides[get_redis] = lambda: fake_redis
     fake_producer = MagicMock()
 
     with (
         patch("api.app._ensure_topics"),
-        patch("api.app._consume_responses", new_callable=lambda: lambda: AsyncMock(return_value=None)),
         patch("api.app.Redis") as mock_redis_cls,
         patch("api.app.Producer", return_value=fake_producer),
     ):
@@ -79,17 +81,15 @@ async def test_history_serializes_messages(client, mock_history_use_case):
     assert data[1]["role"] == "assistant"
 
 
-async def test_stream_delivers_tokens_and_done(client):
+async def test_stream_delivers_tokens_and_done(client, fake_redis):
     request_id = "stream-integ-001"
+    stream_key = f"stream:{request_id}".encode()
 
-    async def feed():
-        await asyncio.sleep(0.05)
-        q = state.response_queues.get(request_id)
-        if q:
-            await q.put({"request_id": request_id, "session_id": "s", "delta": "Hi", "finish_reason": None})
-            await q.put({"request_id": request_id, "session_id": "s", "delta": "", "finish_reason": "stop"})
+    fake_redis.xread = AsyncMock(side_effect=[
+        [(stream_key, [(b"1-0", {b"delta": b"Hi", b"finish_reason": b""})])],
+        [(stream_key, [(b"2-0", {b"delta": b"", b"finish_reason": b"stop"})])],
+    ])
 
-    asyncio.create_task(feed())
     lines = []
     async with client.stream("GET", f"/chat/stream/{request_id}") as resp:
         async for line in resp.aiter_lines():

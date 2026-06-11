@@ -1,13 +1,12 @@
 from __future__ import annotations
-import asyncio
 import json
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from redis.asyncio import Redis
 
-from api import state
-from api.dependencies import get_history_use_case, get_message_store, get_send_message_use_case
+from api.dependencies import get_history_use_case, get_message_store, get_redis, get_send_message_use_case
 from application.interfaces.message_store import MessageStore
 from application.use_cases.get_history import GetHistoryUseCase
 from application.use_cases.send_message import SendMessageUseCase
@@ -33,28 +32,30 @@ async def post_chat(
 
 
 @router.get("/chat/stream/{request_id}")
-async def stream_response(request_id: str) -> StreamingResponse:
-    queue: asyncio.Queue = asyncio.Queue()
-    state.response_queues[request_id] = queue
-
+async def stream_response(
+    request_id: str,
+    redis: Redis = Depends(get_redis),
+) -> StreamingResponse:
     async def event_generator():
-        try:
-            while True:
-                try:
-                    data = await asyncio.wait_for(queue.get(), timeout=30.0)
-                except asyncio.TimeoutError:
-                    yield "data: [DONE]\n\n"
-                    break
-                if data.get("finish_reason") == "stop":
-                    yield "data: [DONE]\n\n"
-                    break
-                content = data.get("delta", "")
-                payload = json.dumps({
-                    "choices": [{"delta": {"content": content}, "finish_reason": None}],
-                })
-                yield f"data: {payload}\n\n"
-        finally:
-            state.response_queues.pop(request_id, None)
+        stream_key = f"stream:{request_id}"
+        last_id = "0"
+        while True:
+            results = await redis.xread({stream_key: last_id}, block=30000, count=100)
+            if not results:
+                yield "data: [DONE]\n\n"
+                return
+            for _stream, messages in results:
+                for msg_id, fields in messages:
+                    last_id = msg_id
+                    finish_reason = fields.get(b"finish_reason", b"").decode()
+                    if finish_reason == "stop":
+                        yield "data: [DONE]\n\n"
+                        return
+                    delta = fields.get(b"delta", b"").decode()
+                    payload = json.dumps({
+                        "choices": [{"delta": {"content": delta}, "finish_reason": None}],
+                    })
+                    yield f"data: {payload}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

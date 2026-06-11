@@ -10,6 +10,7 @@ from consumer.handler import ChatRequestHandler
 from infrastructure.kafka.event_publisher import KafkaEventPublisher
 from infrastructure.llm.factory import create_llm_strategy
 from infrastructure.redis.conversation_cache import RedisConversationCache
+from infrastructure.redis.stream_publisher import RedisStreamPublisher
 from shared.settings import settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -27,7 +28,10 @@ async def run() -> None:
 
     use_case = ProcessChatRequestUseCase(
         generator=create_llm_strategy(),
-        publisher=KafkaEventPublisher(producer=producer),
+        publisher=RedisStreamPublisher(
+            kafka=KafkaEventPublisher(producer=producer),
+            redis=redis,
+        ),
         cache=RedisConversationCache(redis=redis),
     )
     handler = ChatRequestHandler(use_case=use_case)
