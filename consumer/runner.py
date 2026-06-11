@@ -44,15 +44,19 @@ async def run() -> None:
     consumer.subscribe(["chat.requests"])
     logger.info("Consumer started — listening on chat.requests")
     loop = asyncio.get_running_loop()
+    # backpressure: max concurrent requests in-flight
+    sem = asyncio.Semaphore(50)
+
+    async def process(raw_value: bytes) -> None:
+        async with sem:
+            await handler.handle(raw_value=raw_value)
 
     try:
         while True:
             msgs = await loop.run_in_executor(None, consumer.consume, 10, 0.1)
-            valid = [m for m in msgs if not m.error()]
-            if valid:
-                await asyncio.gather(
-                    *[handler.handle(raw_value=m.value()) for m in valid],
-                )
+            for m in msgs:
+                if not m.error():
+                    asyncio.create_task(process(raw_value=m.value()))
     finally:
         consumer.close()
         await redis.aclose()
