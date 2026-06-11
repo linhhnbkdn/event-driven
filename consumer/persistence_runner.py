@@ -35,15 +35,19 @@ async def run() -> None:
     consumer.subscribe(["chat.completed"])
     logger.info("Persistence consumer started — listening on chat.completed")
     loop = asyncio.get_running_loop()
+    # backpressure: cap concurrent Postgres writes to avoid connection pool exhaustion
+    sem = asyncio.Semaphore(30)
+
+    async def process(raw_value: bytes) -> None:
+        async with sem:
+            await handler.handle(raw_value=raw_value)
 
     try:
         while True:
             msgs = await loop.run_in_executor(None, consumer.consume, 50, 0.1)
-            valid = [m for m in msgs if not m.error()]
-            if valid:
-                await asyncio.gather(
-                    *[handler.handle(raw_value=m.value()) for m in valid],
-                )
+            for m in msgs:
+                if not m.error():
+                    asyncio.create_task(process(raw_value=m.value()))
     finally:
         consumer.close()
         await redis.aclose()
