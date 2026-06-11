@@ -25,6 +25,7 @@ class ChatUser(HttpUser):
 
         with self.client.get(
             f"/chat/stream/{request_id}",
+            name="/chat/stream/[request_id]",
             stream=True,
             catch_response=True,
             timeout=30,
