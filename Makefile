@@ -1,4 +1,5 @@
-.PHONY: up down build migrate dev worker persistence test chat history psql logs
+.PHONY: up down build migrate dev worker persistence test chat history psql logs \
+        prod-up prod-down prod-build prod-migrate prod-logs
 
 SESSION ?= default
 MSG     ?= hello
@@ -38,3 +39,18 @@ psql:
 
 logs:
 	docker compose logs -f
+
+prod-build:
+	docker compose -f docker-compose.prod.yaml build
+
+prod-up:
+	docker compose -f docker-compose.prod.yaml up -d
+
+prod-down:
+	docker compose -f docker-compose.prod.yaml down
+
+prod-migrate:
+	docker compose -f docker-compose.prod.yaml exec api uv run alembic upgrade head
+
+prod-logs:
+	docker compose -f docker-compose.prod.yaml logs -f
