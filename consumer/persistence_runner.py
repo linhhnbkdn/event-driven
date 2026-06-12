@@ -3,7 +3,7 @@ import asyncio
 import logging
 
 from confluent_kafka import Consumer, KafkaError
-from redis.asyncio import Redis
+from redis.asyncio import ConnectionPool, Redis
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from application.use_cases.persist_session import PersistSessionUseCase
@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 
 async def run() -> None:
-    redis = Redis.from_url(settings.redis_url)
+    pool = ConnectionPool.from_url(settings.redis_url, max_connections=40)
+    redis = Redis(connection_pool=pool)
     engine = create_async_engine(settings.database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
@@ -51,4 +52,5 @@ async def run() -> None:
     finally:
         consumer.close()
         await redis.aclose()
+        await pool.aclose()
         await engine.dispose()

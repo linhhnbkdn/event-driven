@@ -39,23 +39,26 @@ async def stream_response(
     async def event_generator():
         stream_key = f"stream:{request_id}"
         last_id = "0"
-        while True:
-            results = await redis.xread({stream_key: last_id}, block=30000, count=100)
-            if not results:
-                yield "data: [DONE]\n\n"
-                return
-            for _stream, messages in results:
-                for msg_id, fields in messages:
-                    last_id = msg_id
-                    finish_reason = fields.get(b"finish_reason", b"").decode()
-                    if finish_reason == "stop":
-                        yield "data: [DONE]\n\n"
-                        return
-                    delta = fields.get(b"delta", b"").decode()
-                    payload = json.dumps({
-                        "choices": [{"delta": {"content": delta}, "finish_reason": None}],
-                    })
-                    yield f"data: {payload}\n\n"
+        try:
+            while True:
+                results = await redis.xread({stream_key: last_id}, block=1000, count=100)
+                if not results:
+                    yield "data: [DONE]\n\n"
+                    return
+                for _stream, messages in results:
+                    for msg_id, fields in messages:
+                        last_id = msg_id
+                        finish_reason = fields.get(b"finish_reason", b"").decode()
+                        if finish_reason == "stop":
+                            yield "data: [DONE]\n\n"
+                            return
+                        delta = fields.get(b"delta", b"").decode()
+                        payload = json.dumps({
+                            "choices": [{"delta": {"content": delta}, "finish_reason": None}],
+                        })
+                        yield f"data: {payload}\n\n"
+        finally:
+            await redis.delete(stream_key)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

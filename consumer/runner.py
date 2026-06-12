@@ -3,7 +3,7 @@ import asyncio
 import logging
 
 from confluent_kafka import Consumer, KafkaError, Producer
-from redis.asyncio import Redis
+from redis.asyncio import ConnectionPool, Redis
 
 from application.use_cases.process_chat_request import ProcessChatRequestUseCase
 from consumer.handler import ChatRequestHandler
@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 async def run() -> None:
-    redis = Redis.from_url(settings.redis_url)
+    pool = ConnectionPool.from_url(settings.redis_url, max_connections=60)
+    redis = Redis(connection_pool=pool)
     producer = Producer({
         "bootstrap.servers": settings.kafka_bootstrap_servers,
         "linger.ms": 0,
@@ -60,3 +61,4 @@ async def run() -> None:
     finally:
         consumer.close()
         await redis.aclose()
+        await pool.aclose()

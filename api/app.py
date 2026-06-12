@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from confluent_kafka import Producer
 from confluent_kafka.admin import AdminClient, NewTopic
 from fastapi import FastAPI
-from redis.asyncio import Redis
+from redis.asyncio import ConnectionPool, Redis
 
 from api.routers import chat
 from shared.settings import settings
@@ -34,7 +34,8 @@ def _ensure_topics() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.redis = Redis.from_url(settings.redis_url)
+    pool = ConnectionPool.from_url(settings.redis_url, max_connections=200)
+    app.state.redis = Redis(connection_pool=pool)
     app.state.producer = Producer({
         "bootstrap.servers": settings.kafka_bootstrap_servers,
         "linger.ms": 5,
@@ -44,6 +45,7 @@ async def lifespan(app: FastAPI):
     _ensure_topics()
     yield
     await app.state.redis.aclose()
+    await pool.aclose()
 
 
 app = FastAPI(title="Event-Driven Streaming", lifespan=lifespan)
